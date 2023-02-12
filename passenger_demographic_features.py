@@ -59,7 +59,7 @@ display(passenger_demographic_features)
 
 # COMMAND ----------
 
-feature_table_name = 'default.demographic_features'
+feature_table_name = 'default.demographic_features_rvp'
 
 # If the feature table has already been created, no need to recreate
 try:
@@ -89,7 +89,7 @@ fs.write_table(
 
 # COMMAND ----------
 
-# MAGIC %md To drop the feature table; this table must also be delted in the feature store UI
+# MAGIC %md To drop the feature table; this table must also be deleted in the feature store UI
 
 # COMMAND ----------
 
