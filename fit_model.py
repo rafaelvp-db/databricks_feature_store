@@ -3,6 +3,10 @@
 
 # COMMAND ----------
 
+!pip install databricks-feature-store>0.8.0
+
+# COMMAND ----------
+
 from databricks.feature_store import FeatureLookup
 from databricks.feature_store import FeatureStoreClient
 import mlflow
@@ -58,12 +62,12 @@ mlflow.set_experiment(experiment_location)
 
 feature_lookups = [
     FeatureLookup(
-      table_name = 'default.ticket_features',
+      table_name = 'default.ticket_features_rvp',
       feature_names = ['CabinChar', 'CabinMulti', 'Embarked', 'FareRounded', 'Parch', 'Pclass'],
       lookup_key = 'PassengerId'
     ),
     FeatureLookup(
-      table_name = 'default.demographic_features',
+      table_name = 'default.demographic_features_rvp',
       feature_names = ['Age', 'NameMultiple', 'NamePrefix', 'Sex', 'SibSp'],
       lookup_key = 'PassengerId'
     )
@@ -91,7 +95,12 @@ display(training_df)
 
 # COMMAND ----------
 
-# MAGIC %md Fit a scikit-learn pipeline model to the features. After fitting the model, local the model run in the Mlflow Tracking Server. Promote the model to the Model Registry. Local the model in the Registry and change its "Stage" to "Production"  
+# MAGIC %md 
+# MAGIC 
+# MAGIC * Fit a scikit-learn pipeline model to the features
+# MAGIC * After fitting the model, log the model artifact in the Mlflow Tracking Server
+# MAGIC * Promote the model to the Model Registry
+# MAGIC * Local the model in the Registry and change its "Stage" to "Production"  
 # MAGIC 
 # MAGIC See https://www.mlflow.org/docs/latest/model-registry.html#registering-a-model for instructions.
 
@@ -159,46 +168,20 @@ with mlflow.start_run() as run:
   
   # Fit final model
   final_model = classification_pipeline.fit(data[features], data[label])
-  
-  # Log the model and training data metadata
-  fs.log_model(
-    final_model,
-    artifact_path="model",
-    flavor = mlflow.sklearn, 
-    training_set=training_set
-  )
 
 # COMMAND ----------
 
-# MAGIC %md Register the model in the Model Registry
+ # Log the model and training data metadata
 
-# COMMAND ----------
+ model_registry_name = 'feature_store_models_rvp4'
 
-client = MlflowClient()
-
-# COMMAND ----------
-
-# Create a Model Registry entry for the model if one does not exist
-model_registry_name = 'feature_store_models'
-try:
-  client.get_registered_model(model_registry_name)
-  print(" Registered model already exists")
-except:
-  client.create_registered_model(model_registry_name)
-
-# COMMAND ----------
-
-# Get model run id and artifact path
-model_info = client.get_run(run_id).to_dictionary()
-artifact_uri = model_info['info']['artifact_uri']
-
-
-# Register the model
-registered_model = client.create_model_version(
-                     name = model_registry_name,
-                     source = artifact_uri + "/model",
-                     run_id = run_id
-                    )
+ fs.log_model(
+  model = final_model,
+  artifact_path = "model",
+  flavor = mlflow.sklearn,
+  training_set = training_set,
+  registered_model_name = model_registry_name
+)
 
 # COMMAND ----------
 
@@ -206,7 +189,16 @@ registered_model = client.create_model_version(
 
 # COMMAND ----------
 
-promote_to_prod = client.transition_model_version_stage(name=model_registry_name,
-                                                        version = int(registered_model.version),
-                                                        stage="Production",
-                                                        archive_existing_versions=True)
+
+
+# COMMAND ----------
+
+model_info = client.get_registered_model(model_registry_name)
+version = model_info.latest_versions[-1].version
+
+promote_to_prod = client.transition_model_version_stage(
+  name = model_registry_name,
+  version = int(version),
+  stage="Production",
+  archive_existing_versions=True
+)
